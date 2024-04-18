@@ -20,7 +20,7 @@ W/QaJyMi/q2mjABSkWBuHgKH+/qdfVlqUoIacvrVEMlnH0rrP6fSEHWl4SkYloxU
 2kuZPSJFe/d2TwCClRHMjMjOrN+obO1O7uPLnm+uVJ3HC+xLlq6WbbhBwb/wgB5d
 0kWQxBNxCQ55Af6o8xeV9A=="
 
-# Check OpenSSL and base64 version compatibility
+# Check OpenSSL version compatibility
 openssl_version=$(openssl version)
 if [[ ! "$openssl_version" =~ "OpenSSL" ]]; then
   echo "Error: OpenSSL not found or incompatible version."
