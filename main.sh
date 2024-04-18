@@ -51,7 +51,7 @@ else
   password="$1"
 fi
 
-decrypted_output=$(echo "$encrypted_b64" | openssl enc -aes-256-cbc -d -a -salt -pass pass:"$password" -pbkdf2 -iter 10000000 2>&1)
+decrypted_output=$(echo "$encrypted_b64" | openssl enc -aes-256-cbc -d -a -salt -pass pass:"$password" -pbkdf2 -iter 16988354 2>&1)
 decryption_status=$?
 
 echo "$decrypted_output" | grep -q "bad decrypt"
