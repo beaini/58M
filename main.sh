@@ -20,17 +20,21 @@ W/QaJyMi/q2mjABSkWBuHgKH+/qdfVlqUoIacvrVEMlnH0rrP6fSEHWl4SkYloxU
 2kuZPSJFe/d2TwCClRHMjMjOrN+obO1O7uPLnm+uVJ3HC+xLlq6WbbhBwb/wgB5d
 0kWQxBNxCQ55Af6o8xeV9A=="
 
-# Check OpenSSL version compatibility
+# Check OpenSSL and base64 version compatibility
 openssl_version=$(openssl version)
 if [[ ! "$openssl_version" =~ "OpenSSL" ]]; then
   echo "Error: OpenSSL not found or incompatible version."
   exit 1
 fi
 
-# Prompt for the decryption password
-echo -n "Enter decryption password: "
-read -s password
-echo
+# Check if a password was provided as a command-line argument
+if [ -z "$1" ]; then
+  echo -n "Enter decryption password: "
+  read -s password
+  echo
+else
+  password="$1"
+fi
 
 decrypted_output=$(echo "$encrypted_b64" | openssl enc -aes-256-cbc -d -a -salt -pass pass:"$password" -pbkdf2 -iter 10000000 2>&1)
 decryption_status=$?
