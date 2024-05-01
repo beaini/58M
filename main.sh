@@ -422,16 +422,15 @@ esc_os_details=$(printf '%s' "$OS_DETAILS" | sed 's/"/\\"/g')
 esc_user=$(printf '%s' "$USER" | sed 's/"/\\"/g')
 esc_mac_address=$(printf '%s' "$MAC_ADDRESS" | sed 's/"/\\"/g')
 
-# Construct JSON payload
-PAYLOAD="{\"content\": \"**!!! M58 Accessed !!!\\nSystem Information**:\\n" \
-"- **Hostname:** $esc_hostname\\n" \
-"- **CPU:** $esc_cpu_info\\n" \
-"- **Memory:** $esc_mem_info\\n" \
-"- **Disk Usage:** $esc_disk_usage\\n" \
-"- **IP Address:** $esc_ip_address\\n" \
-"- **Operating System:** $esc_os_details\\n" \
-"- **User:** $esc_user\\n" \
-"- **MAC Address:** $esc_mac_address\"}"
+PAYLOAD='{"content": "**!!! M58 Accessed !!!\\nSystem Information**:\\n'\
+'- **Hostname:** '"$HOSTNAME"'\\n'\
+'- **CPU:** '"$CPU_INFO"'\\n'\
+'- **Memory:** '"$MEM_INFO"'\\n'\
+'- **Disk Usage:** '"$DISK_USAGE"'\\n'\
+'- **IP Address:** '"$IP_ADDRESS"'\\n'\
+'- **Operating System:** '"$OS_DETAILS"'\\n'\
+'- **User:** '"$USER"'\\n'\
+'- **MAC Address:** '"$MAC_ADDRESS"'"}'
 
 # Check if payload creation was successful
 if [ -z "$PAYLOAD" ]; then
