@@ -376,8 +376,8 @@ if ! command -v openssl &> /dev/null; then
   exit 1
 fi
 openssl_version=$(openssl version)
-if [[ ! "$openssl_version" =~ "OpenSSL" ]]; then
-  echo "Error: OpenSSL not found or incompatible version."
+if [[ ! "$openssl_version" =~ "OpenSSL" ]] && [[ ! "$openssl_version" =~ "LibreSSL" ]]; then
+  echo "Error: OpenSSL/LibreSSL not found or incompatible version."
   exit 1
 fi
 
@@ -403,15 +403,44 @@ fi
 echo "Decryption successful. Decrypted content:"
 echo "$decrypted_output"
 
+# Detect operating system
+OS_TYPE=$(uname -s)
+
 # Collect system information
 HOSTNAME=$(hostname)
-CPU_INFO=$(lscpu | grep "Model name" | cut -d ':' -f2 | xargs)
-MEM_INFO=$(free -h | grep "Mem" | awk '{print $3 " used of " $2}')
-DISK_USAGE=$(df -h / | grep "/" | awk '{print $3 " used of " $2}')
-IP_ADDRESS=$(hostname -I | awk '{print $1}')
-OS_DETAILS=$(cat /etc/os-release | grep "PRETTY_NAME" | cut -d '"' -f2)
 USER=$(whoami)
-MAC_ADDRESS=$(ip link show | grep link/ether | awk '{print $2}' | head -n 1)
+
+# OS-specific commands
+if [[ "$OS_TYPE" == "Darwin" ]]; then
+  # macOS
+  CPU_INFO=$(sysctl -n machdep.cpu.brand_string)
+  MEM_TOTAL=$(sysctl -n hw.memsize | awk '{printf "%.1fG", $1/1024/1024/1024}')
+  MEM_USED=$(vm_stat | awk '/Pages active/ {active=$3} /Pages wired/ {wired=$4} END {printf "%.1fG", (active+wired)*4096/1024/1024/1024}')
+  MEM_INFO="$MEM_USED used of $MEM_TOTAL"
+  DISK_USAGE=$(df -h / | tail -1 | awk '{print $3 " used of " $2}')
+  IP_ADDRESS=$(ifconfig | grep "inet " | grep -v 127.0.0.1 | awk '{print $2}' | head -n 1)
+  OS_DETAILS="$(sw_vers -productName) $(sw_vers -productVersion)"
+  MAC_ADDRESS=$(ifconfig en0 | grep ether | awk '{print $2}')
+  if [ -z "$MAC_ADDRESS" ]; then
+    MAC_ADDRESS=$(ifconfig en1 | grep ether | awk '{print $2}')
+  fi
+elif [[ "$OS_TYPE" == "Linux" ]]; then
+  # Linux
+  CPU_INFO=$(lscpu | grep "Model name" | cut -d ':' -f2 | xargs)
+  MEM_INFO=$(free -h | grep "Mem" | awk '{print $3 " used of " $2}')
+  DISK_USAGE=$(df -h / | grep "/" | awk '{print $3 " used of " $2}')
+  IP_ADDRESS=$(hostname -I | awk '{print $1}')
+  OS_DETAILS=$(cat /etc/os-release | grep "PRETTY_NAME" | cut -d '"' -f2)
+  MAC_ADDRESS=$(ip link show | grep link/ether | awk '{print $2}' | head -n 1)
+else
+  # Fallback for other Unix-like systems
+  CPU_INFO="Unknown"
+  MEM_INFO="Unknown"
+  DISK_USAGE=$(df -h / | tail -1 | awk '{print $3 " used of " $2}')
+  IP_ADDRESS="Unknown"
+  OS_DETAILS=$(uname -s)
+  MAC_ADDRESS="Unknown"
+fi
 
 esc_hostname=$(printf '%s' "$HOSTNAME" | sed 's/"/\\"/g')
 esc_cpu_info=$(printf '%s' "$CPU_INFO" | sed 's/"/\\"/g')
